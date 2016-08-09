@@ -3,14 +3,14 @@ CIF data parsing functions for the "MCA" (full timetable) Timetable Information
 Service (TTIS) data dumps.
 """
 
+from enum import Enum, IntEnum
+
 from .cif import \
-    from_ddmmyy, from_yymmdd, from_hhmm, several, if_not_blank, \
+    assert_is, from_ddmmyy, from_yymmdd, from_hhmm, several, if_not_blank, \
     Field, new_cif_record
 
 
 class RecordIdentity(Enum):
-    """Record type identifiers."""
-    
     header = "HD"
     tiploc_insert = "TI"
     association = "AA"
