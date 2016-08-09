@@ -1,6 +1,6 @@
 """
-CIF data parsing functions for the Timetable Information Service (TTIS) data
-dumps.
+CIF data parsing functions for the "MCA" (full timetable) Timetable Information
+Service (TTIS) data dumps.
 """
 
 from .cif import \

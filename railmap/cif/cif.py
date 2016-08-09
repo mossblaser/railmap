@@ -34,11 +34,20 @@ def from_yymmdd(s):
     return from_ddmmyy(s[4:6] + s[2:4] + s[0:2])
 
 def from_hhmm(s):
-    """Convert a "HHMM" format date to a python datetime.time."""
+    """Convert a "HHMM" format time to a python datetime.time."""
     h = int(s[0:0+2])
     m = int(s[2:2+2])
     
     return datetime.time(h, m)
+
+def from_hhmmss(s):
+    """Convert a "HHMMSS" format time to a python datetime.time."""
+    h = int(s[0:0+2])
+    m = int(s[2:2+2])
+    s = int(s[4:4+2])
+    
+    return datetime.time(h, m, s)
+
 
 def several(parse_fn, size=1):
     """Produce a parsing function which returns a list of values parsed by a
