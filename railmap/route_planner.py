@@ -353,8 +353,6 @@ class Schedule(object):
             TIPLOC codes to their associated object.
         """
         self.tiplocs = tiplocs if tiplocs is not None else {}
-        
-        self.visit_id = 0
     
     def __repr__(self):
         return "<{} {} tiplocs>".format(
@@ -369,8 +367,11 @@ class Schedule(object):
         ----------
         start_tiploc_code : str
             The station TIPLOC code to start from.
-        end_tiploc_code : str
-            The station TIPLOC code to attempt to reach.
+        end_tiploc_code : str or None
+            The station TIPLOC code to attempt to reach. If None, the route
+            planner will attempt to reach every TIPLOC setting its 'visited'
+            attribute to the datetime at which the route planner first reached
+            that location.
         start_time : :py:class:`datetime.datetime`
             The date/time at which the journey commences.
         
@@ -379,18 +380,23 @@ class Schedule(object):
         None or (end_time, [Segment, ...])
         """
         start_tiploc = self.tiplocs[start_tiploc_code]
-        end_tiploc = self.tiplocs[end_tiploc_code]
+        if end_tiploc_code is not None:
+            end_tiploc = self.tiplocs[end_tiploc_code]
+        else:
+            end_tiploc = None
         
-        # Produce a new unique ID to write to stations to indicate they've been
-        # visited during this planning process.
-        self.visit_id += 1
+        # Clear the "visited" attribute of all TIPLOCs
+        for tiploc in self.tiplocs.values():
+            tiploc.visited = None
         
         # A queue of TIPLOCs to visit, the time at which the visit occurred and
         # the list of segments visited thus far to reach that station
         #  (datetime, TIPLOC, segments_used)
-        # XXX: Should be a priority queue!
         to_visit = []
         heappush(to_visit, (start_time, start_tiploc, []))
+        
+        # Counter for number of tiplocs visited thus far (for debug messages)
+        tiplocs_visited = 0
         
         while to_visit:
             now, tiploc, segments_used = heappop(to_visit)
@@ -414,26 +420,35 @@ class Schedule(object):
             
             # Consider changing train if we've not changed at this station
             # before and the current segment can set us down here.
-            for tiploc in tiploc.same_station:
-                if (tiploc.visited != self.visit_id and
-                        (cur_segment is None or cur_segment.set_down)):
-                    # Mark station as visited
-                    tiploc.visited = self.visit_id
-                    
-                    # Allow time to change platform etc. if already on something
-                    if cur_segment is not None:
-                        after_change = now + datetime.timedelta(seconds=tiploc.change_time * 60)
-                    else:
-                        after_change = now
-                    
-                    # Consider all segments which are taking up passengers
-                    for segment in tiploc.segments:
-                        next_departure = segment.next_departure(after_change)
-                        if segment.take_up and next_departure is not None:
-                            for next_time, next_segment in segment.next_segments(next_departure):
-                                heappush(to_visit, (next_time,
-                                                    next_segment.tiploc,
-                                                    segments_used + [segment, next_segment]))
+            if cur_segment is None or cur_segment.set_down:
+                # Stations may consist of several tiplocs, hence this loop
+                for tiploc in tiploc.same_station:
+                    if tiploc.visited is None:
+                        # Mark tiploc as visited (and record the time we arrived
+                        # at it)
+                        tiploc.visited = now
+                        
+                        tiplocs_visited += 1
+                        logging.debug("Reached %d of %d TIPLOCs",
+                                      tiplocs_visited, 
+                                      len(self.tiplocs))
+                        
+                        # Allow time to change platform etc. if already on something
+                        if cur_segment is not None:
+                            after_change = now + datetime.timedelta(seconds=tiploc.change_time * 60)
+                        else:
+                            after_change = now
+                        
+                        # Consider all segments which are taking up passengers
+                        for segment in tiploc.segments:
+                            next_departure = segment.next_departure(after_change)
+                            if segment.take_up and next_departure is not None:
+                                for next_time, next_segment in segment.next_segments(next_departure):
+                                    heappush(to_visit, (next_time,
+                                                        next_segment.tiploc,
+                                                        segments_used + [segment, next_segment]))
+        
+        return None
 
 
 _DivideJoinEvent = namedtuple("_DivideJoinEvent",
