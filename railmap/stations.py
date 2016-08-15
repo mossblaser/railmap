@@ -12,7 +12,7 @@ StationRecord = namedtuple("StationRecord", "name,station_code,eastings,northing
 def dbf_to_dict(filename):
     """Read a DBF file containing station information from Network Rail's
     Railway Network Inspire data. Produces a dict which maps from station
-    three-letter-code to its name and location.
+    three-alpha-code to its name and location.
     """
     t = dbf.Table(filename)
     

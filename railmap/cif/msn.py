@@ -107,7 +107,6 @@ def parse_msn(f):
     first = True
     for line in f:
         if first:
-            print(line)
             yield HeaderRecord.from_string(line)
             first = False
         else:
@@ -117,3 +116,4 @@ def parse_msn(f):
                 continue
             
             yield RECORD_TYPES.get(record_type).from_string(line)
+

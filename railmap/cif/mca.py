@@ -3,6 +3,8 @@ CIF data parsing functions for the "MCA" (full timetable) Timetable Information
 Service (TTIS) data dumps.
 """
 
+import datetime
+
 from enum import Enum, IntEnum
 
 from .cif import \
@@ -229,24 +231,24 @@ class Activity(Enum):
     ticket_examination_point = "KE"
     ticket_Examination_Point_1st_class_only = "KF"
     selective_ticket_examination_point = "KS"
-    stops_to_change_locomotives = "L"
+    stop_to_change_locomotives = "L"
     stop_not_advertised = "N"
-    stops_for_other_operating_reasons = "OP"
+    stop_for_other_operating_reasons = "OP"
     train_locomotive_on_rear = "OR"
     propelling_between_points_shown = "PR"
-    stops_when_required = "R"
+    stop_when_required = "R"
     reversing_movement_or_driver_changes_ends = "RM"
-    stops_for_locomotive_to_run_round_train = "RR"
-    stops_for_railway_personnel_only = "S"
-    stops_to_take_up_and_set_down_passengers = "T"
-    stops_to_attach_and_detach_vehicles = "-T"
+    stop_for_locomotive_to_run_round_train = "RR"
+    stop_for_railway_personnel_only = "S"
+    stop_to_take_up_and_set_down_passengers = "T"
+    stop_to_attach_and_detach_vehicles = "-T"
     train_begins = "TB"
     train_finishes = "TF"
     detail_consist_for_tops_direct_requested_by_ews = "TS"
-    stops_for_tablet_staff_or_token = "TW"
-    stops_to_take_up_passengers = "U"
-    stops_to_attach_vehicles = "-U"
-    stops_for_watering_of_coaches = "W"
+    stop_for_tablet_staff_or_token = "TW"
+    stop_to_take_up_passengers = "U"
+    stop_to_attach_vehicles = "-U"
+    stop_for_watering_of_coaches = "W"
     passes_another_train_at_crossing_point_on_single_line = "X"
 
 class Day(IntEnum):
@@ -304,8 +306,8 @@ def from_minutes_and_halves(s):
         
 
 def from_day_set(s):
-    """Converts a binary-encoded bitmap of a set of days in the week."""
-    return set(Day(day) for day, value in enumerate(s) if value == "1")
+    """Read a binary-encoded days-of-week bitfield to an integer."""
+    return int(s[::-1], 2)
 
 
 RECORD_TYPES = {
@@ -343,7 +345,7 @@ RECORD_TYPES = {
         Field("association_days", 7, from_day_set),
         Field("association_category", 2, if_not_blank(AssociationCateogry)),
         Field("association_date_ind", 1, if_not_blank(AssociationDateIndex)),
-        Field("association_location", 7, None),
+        Field("association_location", 7, str.strip),
         Field("base_location_suffix", 1, None),
         Field("assoc_location_suffix", 1, None),
         Field("diagram_type", 1, assert_is("T")),
@@ -390,7 +392,8 @@ RECORD_TYPES = {
     ),
     RecordIdentity.origin_location: new_cif_record("OriginLocationRecord",
         Field("record_identity", 2, assert_record_identity(RecordIdentity.origin_location)),
-        Field("location", 8, str.strip),
+        Field("location", 7, str.strip),
+        Field("location_suffix", 1, None),
         Field("scheduled_departure", 5, from_hhmmh),
         Field("public_departure", 4, from_hhmm),
         Field("platform", 3, str.strip),
@@ -402,7 +405,8 @@ RECORD_TYPES = {
     ),
     RecordIdentity.intermediate_location: new_cif_record("IntermediateLocationRecord",
         Field("record_identity", 2, assert_record_identity(RecordIdentity.intermediate_location)),
-        Field("location", 8, str.strip),
+        Field("location", 7, str.strip),
+        Field("location_suffix", 1, None),
         Field("scheduled_arrival", 5, if_not_blank(from_hhmmh)),
         Field("scheduled_departure", 5, if_not_blank(from_hhmmh)),
         Field("scheduled_pass", 5, if_not_blank(from_hhmmh)),
@@ -418,7 +422,8 @@ RECORD_TYPES = {
     ),
     RecordIdentity.terminating_location: new_cif_record("TerminatingLocationRecord",
         Field("record_identity", 2, assert_record_identity(RecordIdentity.terminating_location)),
-        Field("location", 8, str.strip),
+        Field("location", 7, str.strip),
+        Field("location_suffix", 1, None),
         Field("scheduled_arrival", 5, from_hhmmh),
         Field("public_arrival", 4, from_hhmm),
         Field("platform", 3, str.strip),
@@ -427,7 +432,8 @@ RECORD_TYPES = {
     ),
     RecordIdentity.changes_en_route: new_cif_record("ChangesEnRouteRecord",
         Field("record_identity", 2, assert_record_identity(RecordIdentity.changes_en_route)),
-        Field("location", 8, str.strip),
+        Field("location", 7, str.strip),
+        Field("location_suffix", 1, None),
         Field("train_category", 2, TrainCategory),
         Field("train_identity", 4, None),
         Field("headcode", 4, None),
