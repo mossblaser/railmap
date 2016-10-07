@@ -4,6 +4,7 @@ Information Service (TTIS) data dumps.
 """
 
 from enum import Enum
+from collections import defaultdict
 
 from .cif import \
     assert_is, from_ddmmyy, from_hhmmss, several, \
@@ -117,3 +118,15 @@ def parse_msn(f):
             
             yield RECORD_TYPES.get(record_type).from_string(line)
 
+def msn_to_dict(filename):
+    """Parse a Timetable Information Service (TTIS) MSN (master stations names)
+    file producing a dict from three-alpha-code to set of
+    :py:class:`.StationDetailsRecord` applicable to that code. Stations without
+    a three-alpha-code appear in the None entry of the dict.
+    """
+    out = defaultdict(set)
+    with open(filename) as f:
+        for record in parse_msn(f):
+            if isinstance(record, StationDetailsRecord):
+                out[record.three_alpha_code].add(record)
+    return out
