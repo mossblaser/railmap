@@ -218,10 +218,10 @@ def main():
 
     output_group.add_argument("filename", metavar="FILENAME",
                               help="The output filename *.pdf or *.png")
-    output_group.add_argument("width", nargs="?", metavar="WIDTH",
+    output_group.add_argument("width", nargs="?", metavar="WIDTH", type=float,
                               help="Output size (PDF: mm, PNG: px). "
                                    "Automatic if not given.")
-    output_group.add_argument("height", nargs="?", metavar="HEIGHT",
+    output_group.add_argument("height", nargs="?", metavar="HEIGHT", type=float,
                               help="Automatic if not given.")
     
     input_group = parser.add_argument_group("input files")
@@ -393,10 +393,15 @@ def main():
     # Determine requested dimensions
     if args.width is None:
         width = default_width
+    else:
+        width = args.width
     if args.height is None:
         height = width / network_ratio
     else:
         height = args.height
+    
+    width = dimension_format(width)
+    height = dimension_format(height)
     
     with cairo_env_decorator(args.filename, width, height) as ctx:
         # Draw lines with rounded joints and caps to avoid highly detailed
