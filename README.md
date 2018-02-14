@@ -7,13 +7,18 @@ to any location in the UK rail network starting from a particular location.
 Example images
 --------------
 
-Close up showing distances from Manchester:
+A zoomed-out wide-view of the whole map showing journey times from Stockport
+station. Though in this 1000x1000 'thumbnail' the text is not ledgible, the
+general trend in journey times is just about visible in the colour coding.
 
-![Manchester](./examples/closeupManchester.png)
+![A UK Map with all railway lines faintly visible with illedgible coloured text
+going from green around Manchester towards red further away as journey times
+get longer.](./examples/wholeUK.png)
 
-Zoomed-out shot of the south of England:
+Below is a closeup of the Manchester area showing name labels on major
+interchange stations and journey times (`h:mm` format), where they fit!
 
-![South](./examples/south.png)
+![South](./examples/closeupManchester.png)
 
 
 Usage

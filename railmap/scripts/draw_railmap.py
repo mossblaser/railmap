@@ -76,33 +76,55 @@ def fit_and_center(ctx, page_width, page_height, min_x, min_y, max_x, max_y):
         
         yield ctx
 
-def draw_text_bounds(ctx, ox, oy, text, align_point=0.0, size=1.0, *args, **kwargs):
+def draw_text_bounds(ctx, ox, oy, text, font="Sans", align_point=0.0, size=1.0, outline_size=0.1, *args, **kwargs):
     """
     Get the bounding box of the specified text as a (x1, y1, x2, y2) tuple.
     """
     with ctx:
-        ctx.select_font_face("Sans")
+        ctx.select_font_face(font)
         ctx.set_font_size(size)
         x,y, w,h, _w,_h = ctx.text_extents(text)
         x1 = -x + ((1.0-w)*align_point)
-        y1 = -y - size/2
+        y1 = -y
         x2 = x1 + w
-        y2 = y1 + h
-        return (ox+x1,oy+y1, ox+x2,oy+y2)
+        y2 = y1 - h
+        
+        
+        # The bounding box on global coordinates
+        x1, y1, x2, y2 = (ox+x1,oy+y1, ox+x2,oy+y2)
+        
+        # Account for outline
+        x1 -= outline_size/2
+        x2 += outline_size/2
+        y1 += outline_size/2
+        y2 -= outline_size/2
+        
+        # Finally, center vertically
+        return (x1, y1 - h/2,
+                x2, y2 - h/2)
 
-def draw_text(ctx, ox, oy, text, align_point=0.0, size=1.0, rgba=(0.0,0.0,0.0, 1.0)):
+def draw_text(ctx, ox, oy, text, font="Sans", align_point=0.0, size=1.0,
+              rgba=(0.0,0.0,0.0, 1.0),
+              outline_size=0.1,
+              outline_rgba=(1.0,1.0,1.0, 1.0)):
     """
     Draw the desired text centered vertically around (0,0) horizontally
     "align_point" along the text's width.
     """
     with ctx:
         ctx.translate(ox, oy)
-        ctx.select_font_face("Sans")
-        ctx.set_source_rgba(*rgba)
+        ctx.select_font_face(font)
         ctx.set_font_size(size)
         x,y, w,h, _w,_h = ctx.text_extents(text)
-        ctx.move_to(-x + ((1.0-w)*align_point), -y - size/2)
-        ctx.show_text(text)
+        ctx.move_to(-x + ((1.0-w)*align_point), -y - h/2)
+        ctx.text_path(text)
+        
+        ctx.set_line_width(outline_size)
+        ctx.set_source_rgba(*outline_rgba)
+        ctx.stroke_preserve()
+        
+        ctx.set_source_rgba(*rgba)
+        ctx.fill()
 
 
 def get_network_bounds(network_lines):
@@ -124,7 +146,8 @@ def load_station_times(filename):
     """
     Given a route-times CSV file produced by the ``railmap_station_times``
     script, extracts the duration for each three-alpha-code. Blindly assumes
-    all entries start from the same station.
+    all entries start from the same station. Take the minimum of all reported
+    journey durations.
     
     Returns
     -------
@@ -140,7 +163,9 @@ def load_station_times(filename):
         
         for line in lines[1:]:
             cols = line.split(",")
-            out[cols[station_col]] = float(cols[duration_col])
+            station = cols[station_col]
+            duration = float(cols[duration_col])
+            out[station] = min(out.get(station, duration), duration)
     return out
 
 def html_colour(string):
@@ -153,6 +178,19 @@ def html_colour(string):
         return (r, g, b, 1.0)
     else:
         raise TypeError(string)
+
+def time_and_colour(string):
+    """
+    Parse a 'H:MM#RRGGBB' string returning the corresponding number of seconds
+    and a (r, g, b, a) tuple.
+    """
+    match = re.match(r"^([0-9]+):([0-9]+)(#[0-9a-fA-F]{6})$", string)
+    if match:
+        h, m, colour_hex = match.groups()
+        return (((int(h) * 60) + int(m)) * 60,
+                html_colour(colour_hex))
+    else:
+        raise ValueError(string)
 
 class ObstructionTester(object):
     """Test if a given rectangle is obstructed by a set of existing rectangles.
@@ -181,17 +219,9 @@ class ObstructionTester(object):
         """Check if a given rectangle as a tuple (x1,y1, x2,y2) is obstructed
         by any rectangle previously added. Returns True if so, False otherwise.
         """
+        ax1,ay1, ax2,ay2 = rect
         for bx1,by1, bx2,by2 in self.obstructions:
-            # (Maybe) clobbered in each iteration
-            ax1,ay1, ax2,ay2 = rect
-            
-            # Flip to put 'a' as top-left-most
-            if ax1 > bx1:
-                ax1, ax2, bx1, bx2 = bx1, bx2, ax1, ax2
-            if ay1 > by1:
-                ay1, ay2, by1, by2 = by1, by2, ay1, ay2
-            
-            if bx1 <= ax2 and by1 <= ay2:
+            if ax1 < bx2 and ax2 > bx1 and ay1 > by2 and ay2 < by1:
                 return True
         return False
 
@@ -205,9 +235,9 @@ def draw_shp_lists(ctx, lists):
     for line in lists:
         x, y = line[0]
         ctx.move_to(x, -y)
+        
         for x, y in line[1:]:
             ctx.line_to(x, -y)
-
 
 def main():
     parser = ArgumentParser(
@@ -280,6 +310,23 @@ def main():
                                   "shown regardless of their interchange "
                                   "size.")
     
+    style_group.add_argument("--colours", default=[
+                                 "0:30#33A02C",  # Green
+                                 "1:30#1F78B4",  # Blue
+                                 "3:00#6A3D9A",  # Purple
+                                 "4:30#FF7F00",  # Orange
+                                 "6:00#B15928",  # Brown
+                                 "7:30#E31A1C",  # Red
+                             ], nargs="+",
+                             type=str,
+                             help="Define the journey-duration-dependent "
+                                  "colour scheme for station labels and dots. "
+                                  "Expect a set of 'H:MM#RRGGBB' values. All "
+                                  "journeys no longer than H:MM will be "
+                                  "coloured with the HTML hex colour code "
+                                  "#RRGGBB. Journeys longer than the last "
+                                  "value given will be given the same colour.")
+    
     style_group.add_argument("--railway-line-thickness", "-r", type=float,
                              metavar="THICKNESS", default=500.0,
                              help="Thickness of railway lines. "
@@ -300,26 +347,33 @@ def main():
                              metavar="SIZE", default=1000.0,
                              help="Diameter of the dots drawn at station "
                                   "locations. (Default: %(default)s)")
-    style_group.add_argument("--station-dot-colour", "-S", type=html_colour,
-                             metavar="COLOUR", default=html_colour("#FF0000"),
-                             help="Colour of the dots drawn at station "
-                                  "locations.")
     
     style_group.add_argument("--station-name-size", "-n", type=float,
                              metavar="SIZE", default=5000.0,
                              help="Height of station name labels. "
                                   "(Default: %(default)s)")
-    style_group.add_argument("--station-name-colour", "-N", type=html_colour,
-                             metavar="COLOUR", default=html_colour("#008800"),
-                             help="Colour of station name labels.")
+    style_group.add_argument("--station-name-outline-size", type=float,
+                             metavar="SIZE", default=800.0,
+                             help="Thickness of station name outline. "
+                                  "(Default: %(default)s)")
+    style_group.add_argument("--station-name-outline-colour", type=html_colour,
+                             metavar="COLOUR", default=html_colour("#FFFFFF"),
+                             help="Station name outline colour.")
     
     style_group.add_argument("--journey-time-size", "-j", type=float,
                              metavar="SIZE", default=2000.0,
                              help="Height of journey time labels. "
                                   "(Default: %(default)s)")
-    style_group.add_argument("--journey-time-colour", "-J", type=html_colour,
-                             metavar="COLOUR", default=html_colour("#000088"),
-                             help="Colour of journey time labels.")
+    style_group.add_argument("--journey-time-outline-size", type=float,
+                             metavar="SIZE", default=800.0,
+                             help="Thickness of journey time label outlines. "
+                                  "(Default: %(default)s)")
+    style_group.add_argument("--journey-time-outline-colour", type=html_colour,
+                             metavar="COLOUR", default=html_colour("#FFFFFF"),
+                             help="Journey time label outline colour.")
+    
+    style_group.add_argument("--font", type=str, default="Sans",
+                             help="The font to use for all text.")
     
     args = parser.parse_args()
     
@@ -357,17 +411,36 @@ def main():
         (station.eastings, station.northings) != (0, 0)
     ]
     
-    # Sort the station list to put high-priorty entities first
-    railway_stations = sorted(railway_stations, key=(lambda station:
-        args.prioritise.index(station.station_code)
-        if station.station_code in args.prioritise
-        else len(args.prioritise)
-        ))
-    
     if args.railway_station_details is not None:
         railway_station_details = msn_to_dict(args.railway_station_details)
     else:
         railway_station_details = {}
+    
+    # Sort the station list to put high-priorty entities first
+    def interchange_score(station):
+        substations = railway_station_details.get(station.station_code)
+        if substations:
+            return max(s.interchange_status.score for s in substations)
+        else:
+            return 0
+    railway_stations = sorted(railway_stations, key=(lambda station:
+        args.prioritise.index(station.station_code)
+        if station.station_code in args.prioritise
+        else len(args.prioritise) + (10 - interchange_score(station))))
+    
+    # Parse the colour list
+    try:
+        colours = sorted(map(time_and_colour, args.colours))
+    except ValueError:
+        parser.error("All --colours must be of the form H:MM#RRGGBB.")
+    station_colours = {}
+    for station in railway_stations:
+        journey_time = station_times[station.station_code]
+        colour = (0.0, 0.0, 0.0, 1.0)
+        for threshold, colour in colours:
+            if journey_time <= threshold:
+                break
+        station_colours[station.station_code] = colour
     
     if args.railway_lines is not None:
         railway_lines = shp_to_lists(args.railway_lines)
@@ -384,6 +457,16 @@ def main():
     min_x, min_y, max_x, max_y = get_network_bounds(
         coastline + railway_lines +
         [[(station.eastings, station.northings) for station in railway_stations]])
+    
+    # Add padding around edges for labels (a bit over-generous since we can't
+    # compute text extents before the context is created)
+    text_size = max(args.station_name_size, args.journey_time_size)
+    w = text_size * 4  # Station names are 3 characters wide, allow for spacing/variable font width
+    h = text_size * 1.5
+    min_x -= w
+    max_x += w
+    min_y -= h
+    max_y += h
     
     # Determine map dimensions
     network_width = max_x - min_x
@@ -427,51 +510,70 @@ def main():
             ctx.stroke()
             
             # Draw station dots
+            dot_ot = ObstructionTester()
             for station in railway_stations:
                 # Draw a dot where the station is located
-                ctx.set_source_rgba(*args.station_dot_colour)
-                ctx.arc(station.eastings, -station.northings,
-                        args.station_dot_size/2.0,
-                        0.0, 2.0*pi)
+                ctx.set_source_rgba(*station_colours[station.station_code])
+                x = station.eastings
+                y = -station.northings
+                r = args.station_dot_size/2.0
+                ctx.arc(x, y, r, 0.0, 2.0*pi)
                 ctx.fill()
+                
+                dot_ot.add(x-r, y+r, x+r, y-r)
             
             # Draw station names and journey times
-            ot = ObstructionTester()
+            label_ot = ObstructionTester()
             for station in railway_stations:
                 # Only show station names for sufficiently major stations, or
                 # stations granted higher priority
                 sub_stations = railway_station_details.get(station.station_code)
+                station_name_visible = False
                 if (not railway_station_details or 
                         station.station_code.upper() in args.prioritise or
                         (sub_stations and any(s.interchange_status
                                               in interchange_statuses
                                               for s in sub_stations))):
                     fargs = [ctx,
-                             station.eastings - args.station_dot_size,
+                             station.eastings - args.station_dot_size*1.05,
                              -station.northings,
                              station.station_code]
                     fkwargs = {"align_point": 1,
+                               "font": args.font,
                                "size": args.station_name_size,
-                               "rgba": args.station_name_colour}
+                               "rgba": station_colours[station.station_code],
+                               "outline_size": args.station_name_outline_size,
+                               "outline_rgba": args.station_name_outline_colour}
                     bbox = draw_text_bounds(*fargs, **fkwargs)
-                    if bbox not in ot:
-                        ot.add(*bbox)
+                    if bbox not in label_ot:
+                        label_ot.add(*bbox)
                         draw_text(*fargs, **fkwargs)
+                        station_name_visible = True
                 
                 # Show journey times
                 duration = int(station_times[station.station_code]) // 60
                 hours = duration // 60
                 minutes = duration - (hours * 60)
                 fargs = [ctx,
-                         station.eastings + args.station_dot_size,
+                         station.eastings + args.station_dot_size*1.05,
                          -station.northings,
                          "{}:{:02d}".format(hours, minutes)]
                 fkwargs = {"align_point": 0,
+                           "font": args.font,
                            "size": args.journey_time_size,
-                           "rgba": args.journey_time_colour}
+                           "rgba": station_colours[station.station_code],
+                           "outline_size": args.journey_time_outline_size,
+                           "outline_rgba": args.journey_time_outline_colour}
                 bbox = draw_text_bounds(*fargs, **fkwargs)
-                if bbox not in ot:
-                    ot.add(*bbox)
+                # Avoid writing times over dots unless the station label was
+                # also displayed (i.e. this station is of higher than usual
+                # priority/interest). Also don't write times which are
+                # outrageous (e.g. >24 hours) since these are probably stations
+                # for which timetable information is very dubious.
+                if (bbox not in label_ot and
+                        (bbox not in dot_ot or station_name_visible) and
+                        hours < 24):
+                    label_ot.add(*bbox)
                     draw_text(*fargs, **fkwargs)
 
 if __name__ == "__main__":

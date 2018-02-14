@@ -32,6 +32,13 @@ class InterchangeStatus(Enum):
     medium = "2"
     large = "3"
     subsidiary_tiploc = "9"
+    
+    @property
+    def score(self):
+        if self != InterchangeStatus.subsidiary_tiploc:
+            return int(self.value)
+        else:
+            return 0
 
 class EstimatedCoordinates(Enum):
     yes = "E"
