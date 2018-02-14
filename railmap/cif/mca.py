@@ -209,6 +209,7 @@ class ServiceBrand(Enum):
     none = " "
     eurostar = "E"
     alphaline = "A"
+    unknown = "U"
 
 class AppliccableTimetableCode(Enum):
     """A.K.A. ATS Code"""
